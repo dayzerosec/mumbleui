@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <style>
+
+    </style>
+    <link rel="stylesheet" href="mumbleui.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/2.2.0/socket.io.slim.js"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="users.js"></script>
+    <script>
+        var _state = {}
+        var _socket = undefined
+        function createSpeaker(info) {
+            let user = users[info.name.toLowerCase()]!==undefined?users[info.name.toLowerCase()]:users["_default"]
+            console.log("user", info, user)
+            let customClass = (user.class !== undefined)?user.class:""
+
+            $('.container').append(
+                `<div id="speaker-${info.name}" class="user-container fadein ${info.name} ${customClass}">
+                    <div class="avatar" style="background-image: url('${user.avatar}')"></div>
+                    <div class="username-container">
+                        <div class="username">${user.name}</div>
+                    </div>
+                </div>`
+            )
+        }
+        function getSpeakerContainer(name) {
+            return $('.container #speaker-'+name)
+        }
+        function destroySpeaker(info) {
+            let container = getSpeakerContainer(info.name)
+            container.removeClass("fadein").addClass("fadeout")
+            setTimeout(()=>{container.remove()}, 1100)
+        }
+        function newJoin(name) {
+            if(_state[name] === undefined) {
+                console.log(name, "joined")
+                _state[name] = {
+                    "name": name,
+                    "is_speaking": false,
+                }
+                createSpeaker(_state[name])
+            }
+        }
+        function newLeave(name) {
+            if(_state[name] !== undefined) {
+                console.log(name, "left")
+                destroySpeaker(_state[name])
+                delete(_state[name])
+            }
+        }
+        function startSpeaking(name) {
+            let u = _state[name]
+            if(u.is_speaking) return
+
+            u.is_speaking = true
+            console.log(name, "speaking")
+            let container = getSpeakerContainer(name)
+            container.addClass("active")
+        }
+        function stopSpeaking(name) {
+            let u = _state[name]
+            if(!u.is_speaking) return
+
+            u.is_speaking = false
+            console.log(name, "stopped speaking")
+
+            let container = getSpeakerContainer(name)
+            container.removeClass("active")
+        }
+        $(function(){
+            _socket = io({transports: ['websocket']});
+            _socket.on("connect", () => {
+                _socket.emit('action', {"action":"user-list"})
+            });
+            _socket.on("action", (msg)=>{
+                switch(msg.action) {
+                    case "user-list":
+                        msg.data.forEach((v)=>newJoin(v))
+                        break;
+                }
+            });
+            _socket.on("join", (name)=>{newJoin(name)})
+            _socket.on("leave", (name)=>{newLeave(name)})
+            _socket.on("broadcast", (info)=>{
+                newJoin(info.name)
+                if(info.is_speaking) {
+                    startSpeaking(info.name)
+                } else {
+                    stopSpeaking(info.name)
+                }
+            })
+        })
+    </script>
+</head>
+<body>
+<div class="container">
+
+
+</div>
+</body>
+</html>
